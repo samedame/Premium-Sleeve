@@ -1,0 +1,60 @@
+name: monitor
+
+on:
+  schedule:
+    # Monitor open positions twice daily (11:00 and 15:30 ET), Mon-Fri.
+    # so the time holds across the DST change. The guard step below
+    # drops the hour that is wrong for the current offset.
+    - cron: "0 15,19 * * 1-5"   # EDT
+    - cron: "0 16,20 * * 1-5"   # EST
+  workflow_dispatch:           # open-scheduler fires this
+
+permissions:
+  contents: write
+
+concurrency:
+  group: premium-sleeve-state
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip wrong DST hour
+        if: github.event_name == 'schedule'
+        run: |
+          OFFSET=$(TZ=America/New_York date +%z)
+          HOUR=$(date -u +%H)
+          if [ "$OFFSET" = "-0400" ] && [ "$HOUR" != "15" ] && [ "$HOUR" != "19" ]; then
+            echo "EDT: skipping $HOUR UTC"; echo "SKIP=1" >> $GITHUB_ENV
+          elif [ "$OFFSET" = "-0500" ] && [ "$HOUR" != "16" ] && [ "$HOUR" != "20" ]; then
+            echo "EST: skipping $HOUR UTC"; echo "SKIP=1" >> $GITHUB_ENV
+          fi
+
+      - uses: actions/setup-python@v5
+        if: env.SKIP != '1'
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+        if: env.SKIP != '1'
+
+      - name: Run monitor
+        if: env.SKIP != '1'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ACCOUNT_CAPITAL_FOR_SIZING: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING }}
+          ASSUME_FILLED: ${{ vars.ASSUME_FILLED }}
+        run: python -m src.monitor
+
+      - name: Commit state
+        if: env.SKIP != '1'
+        run: |
+          git config user.name  "premium-sleeve"
+          git config user.email "bot@users.noreply.github.com"
+          git add state/
+          git diff --staged --quiet || git commit -m "monitor: state update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
