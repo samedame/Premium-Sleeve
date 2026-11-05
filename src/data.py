@@ -1,4 +1,5 @@
-"""Market data via yfinance.
+"""Market data: Tradier first when TRADIER_API_KEY is set (option chains and the underlying price), yfinance otherwise
+and as the fallback. VIX and VIX3M stay on yfinance.
 
 Snapshot only. This is a live-pricing source, not a backtesting source:
 it has no point-in-time history and no historical bid/ask. Nothing here
@@ -11,6 +12,8 @@ import time
 from dataclasses import dataclass
 
 import yfinance as yf
+
+from .tradier_chain import make_ticker
 
 _RETRIES = 4
 _BACKOFF = 3.0
@@ -74,7 +77,7 @@ def _today() -> dt.date:
 
 def spot(ticker: str) -> float:
     hist = _retry(
-        lambda: yf.Ticker(ticker).history(period="5d", interval="1d"),
+        lambda: make_ticker(ticker, yf).history(period="5d", interval="1d"),
         f"price history for {ticker}",
     )
     return float(hist["Close"].iloc[-1])
@@ -101,7 +104,7 @@ def vix_ratio() -> tuple[float, float, float]:
 
 def put_chains(ticker: str, dte_min: int, dte_max: int) -> list[Chain]:
     """Every put chain whose expiry falls inside the DTE window."""
-    tk = yf.Ticker(ticker)
+    tk = make_ticker(ticker, yf)
     expiries = _retry(lambda: tk.options, f"option expiries for {ticker}")
 
     today = _today()
@@ -138,7 +141,7 @@ def quote_for(ticker: str, expiry: dt.date, strike: float) -> OptionQuote | None
     "this strike does not exist" from "I could not see the price",
     because the second must never be mistaken for "no exit needed".
     """
-    tk = yf.Ticker(ticker)
+    tk = make_ticker(ticker, yf)
     raw = expiry.isoformat()
     expiries = _retry(lambda: tk.options, f"option expiries for {ticker}")
     if raw not in expiries:

@@ -46,6 +46,8 @@ jobs:
         if: env.SKIP != '1'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TRADIER_API_KEY: ${{ secrets.TRADIER_API_KEY }}
+          TRADIER_BASE_URL: ${{ secrets.TRADIER_BASE_URL }}
           ACCOUNT_CAPITAL_FOR_SIZING: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING }}
           ASSUME_FILLED: ${{ vars.ASSUME_FILLED }}
         run: python -m src.monitor
