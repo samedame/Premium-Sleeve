@@ -120,13 +120,18 @@ to `state/gate_override.json`. An override file always wins.
 pip install -r requirements.txt
 DRY_RUN=1 python -m src.entry     # print alerts, touch nothing
 DRY_RUN=1 python -m src.monitor
-python3 tests/test_sleeve.py      # 37 checks, no network needed
+python3 tests/test_sleeve.py      # no network needed
 ```
 
-Two workflows: `entry.yml` scans at 15:40 ET weekdays, `monitor.yml`
-checks open positions at 11:00 and 15:30 ET. Both carry a DST guard
-(two cron lines, wrong-hour run skipped) and both accept
-`workflow_dispatch` so `open-scheduler` can fire them.
+Two workflows: `entry.yml` scans for a new spread once per weekday,
+`monitor.yml` checks open positions up to twice a day. Both fire hourly
+and `src/schedule_guard.py` lets through only a run that lands inside
+the window (entry 12:00-15:55 ET, monitor 09:45-15:55 ET, monitor at
+least 3h apart), tracked in `state/runs.json`. GitHub cron starts runs
+hours late on this repo, which is why the old exact-UTC-hour DST guard
+silently skipped every entry scan; the guard now keys on New York time
+and the daily limit instead. Both also accept `workflow_dispatch`, which
+bypasses the window, so `open-scheduler` can fire them at 15:40 ET.
 
 Set `DISCORD_WEBHOOK_URL` as a repo **secret**;
 `ACCOUNT_CAPITAL_FOR_SIZING` and `ASSUME_FILLED` as repo **variables**.

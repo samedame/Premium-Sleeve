@@ -135,5 +135,43 @@ check("stays halted in backwardation even after 20 sessions",
 check("restarts after 20 sessions in contango",
       not kill_switch(halted, CFG, 0.90)[0])
 
+from src.schedule_guard import decide, record
+
+def utc(y, m, d, hh, mm):
+    return dt.datetime(y, m, d, hh, mm, tzinfo=dt.timezone.utc)
+
+# The two real runs that were wrongly dropped: the 20:40 UTC slot arrived at
+# 01:05 UTC (after the close) and the 19:40 slot at 00:33 UTC. Those are
+# outside the window and still skip -- but a run that lands in the afternoon
+# must now go through, whatever its UTC hour.
+check("entry runs at 18:40 UTC in EST (13:40 ET)",
+      decide("entry", utc(2026, 11, 5, 18, 40), {})[0])
+check("entry runs at 17:40 UTC in EDT (13:40 ET)",
+      decide("entry", utc(2026, 10, 28, 17, 40), {})[0])
+check("entry skips after the close (01:05 UTC = 20:05 ET)",
+      not decide("entry", utc(2026, 11, 6, 1, 5), {})[0])
+check("entry skips before the window (14:40 UTC EST = 09:40 ET)",
+      not decide("entry", utc(2026, 11, 5, 14, 40), {})[0])
+check("entry skips on a weekend",
+      not decide("entry", utc(2026, 11, 7, 18, 40), {})[0])
+done = record("entry", utc(2026, 11, 5, 18, 40), {})
+check("entry runs once per ET date",
+      not decide("entry", utc(2026, 11, 5, 19, 40), done)[0])
+check("entry runs again the next day",
+      decide("entry", utc(2026, 11, 6, 18, 40), done)[0])
+check("dispatch bypasses the window",
+      decide("entry", utc(2026, 11, 6, 1, 5), {}, "workflow_dispatch")[0])
+m1 = record("monitor", utc(2026, 11, 5, 15, 10), {})
+check("monitor waits 3h between runs",
+      not decide("monitor", utc(2026, 11, 5, 17, 10), m1)[0])
+check("monitor allows a second run after 3h",
+      decide("monitor", utc(2026, 11, 5, 19, 10), m1)[0])
+m2 = record("monitor", utc(2026, 11, 5, 19, 10), m1)
+check("monitor stops at two runs a day",
+      not decide("monitor", utc(2026, 11, 5, 20, 10), m2)[0])
+old = record("entry", utc(2026, 10, 1, 18, 40), {})
+check("old run records are pruned",
+      "entry" not in record("monitor", utc(2026, 11, 5, 15, 10), old))
+
 print("\n" + ("ALL PASS" if not FAILS else f"{len(FAILS)} FAILURES: {FAILS}"))
 sys.exit(1 if FAILS else 0)

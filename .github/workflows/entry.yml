@@ -2,11 +2,12 @@ name: entry
 
 on:
   schedule:
-    # 15:40 ET entry scan, Mon-Fri. Cron is UTC; both offsets are listed
-    # so the time holds across the DST change. The guard step below
-    # drops the hour that is wrong for the current offset.
-    - cron: "40 19 * * 1-5"   # 15:40 EDT
-    - cron: "40 20 * * 1-5"   # 15:40 EST
+    # GitHub starts cron runs 3.5-5h late on this repo, and an exact-hour
+    # guard used to discard every one of them. Fire hourly instead and let
+    # src/schedule_guard.py pick the first run that lands inside the entry
+    # window (12:00-15:55 ET, once per ET date). Cron is UTC and the guard
+    # works in ET, so no DST handling is needed here.
+    - cron: "40 14-20 * * 1-5"
   workflow_dispatch:           # open-scheduler fires this
 
 permissions:
@@ -22,16 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Skip wrong DST hour
-        if: github.event_name == 'schedule'
-        run: |
-          OFFSET=$(TZ=America/New_York date +%z)
-          HOUR=$(date -u +%H)
-          if [ "$OFFSET" = "-0400" ] && [ "$HOUR" != "19" ]; then
-            echo "EDT: skipping $HOUR UTC"; echo "SKIP=1" >> $GITHUB_ENV
-          elif [ "$OFFSET" = "-0500" ] && [ "$HOUR" != "20" ]; then
-            echo "EST: skipping $HOUR UTC"; echo "SKIP=1" >> $GITHUB_ENV
-          fi
+      - name: Schedule guard
+        run: python3 -m src.schedule_guard check entry --event "${{ github.event_name }}"
 
       - uses: actions/setup-python@v5
         if: env.SKIP != '1'
@@ -50,6 +43,12 @@ jobs:
           ASSUME_FILLED: ${{ vars.ASSUME_FILLED }}
         run: python -m src.entry
 
+      # Only reached when the scan finished without a data error, so a
+      # throttled run is retried by the next hourly slot.
+      - name: Record run
+        if: env.SKIP != '1'
+        run: python -m src.schedule_guard record entry
+
       - name: Commit state
         if: env.SKIP != '1'
         run: |
@@ -57,4 +56,5 @@ jobs:
           git config user.email "bot@users.noreply.github.com"
           git add state/
           git diff --staged --quiet || git commit -m "entry: state update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
