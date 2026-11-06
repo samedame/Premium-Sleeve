@@ -39,7 +39,7 @@ jobs:
         if: env.SKIP != '1'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          ACCOUNT_CAPITAL_FOR_SIZING: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING }}
+          ACCOUNT_CAPITAL_FOR_SIZING: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING || '1500' }}   # default 1500; a repo variable overrides it
           ASSUME_FILLED: ${{ vars.ASSUME_FILLED }}
         run: python -m src.entry
 
