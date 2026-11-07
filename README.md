@@ -182,3 +182,12 @@ only improvement actually available.
   and raises rather than returning empty, so a throttled run fails loudly
   instead of looking like "no candidates".
 - Early assignment and pin risk on the short leg are not modelled.
+
+## Data source (Tradier first, labelled yfinance fallback)
+
+`src/data.py` asks Tradier first (`TRADIER_API_KEY`, optional `TRADIER_BASE_URL`; read-only client in `src/tradier.py`) and
+falls back to yfinance if the key is missing or Tradier fails. Every ENTRY/EXIT alert has a **Data source** field; yfinance
+data is always labelled **DELAYED/UNVERIFIED**. If a leg has `bid <= 0`, `ask <= 0`, or (Tradier) a quote older than
+`data.MAX_QUOTE_AGE_MIN`, the bot posts a **NOTICE** instead of an entry alert, and the monitor reports the position as
+UNPRICED instead of evaluating exits on a bad price. Strike selection (`src/selector.py`) is unchanged.
+`python3 tests/test_data_sources.py` checks this offline, including identical strike selection from both sources.

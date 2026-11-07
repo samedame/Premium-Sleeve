@@ -29,7 +29,7 @@ def _post(webhook: str, payload: dict, dry_run: bool) -> bool:
         return False
 
 
-def entry_alert(webhook, cand, verdict, gate, book, dry_run) -> bool:
+def entry_alert(webhook, cand, verdict, gate, book, dry_run, data_label: str = "") -> bool:
     sized = "UNSIZED" if verdict.unsized else f"{verdict.contracts} contract(s)"
     fields = [
         {"name": "Structure",
@@ -64,6 +64,8 @@ def entry_alert(webhook, cand, verdict, gate, book, dry_run) -> bool:
          "inline": False},
         {"name": "Sizing notes", "value": "\n".join(verdict.reasons) or "-", "inline": False},
     ]
+    if data_label:
+        fields.append({"name": "Data source", "value": data_label, "inline": False})
     return _post(webhook, {"embeds": [{
         "title": "Premium sleeve — ENTRY",
         "description": "Manual execution on Robinhood. This is an alert, not an order.",
@@ -72,7 +74,7 @@ def entry_alert(webhook, cand, verdict, gate, book, dry_run) -> bool:
     }]}, dry_run)
 
 
-def exit_alert(webhook, pos, debit, reason, pnl, dry_run) -> bool:
+def exit_alert(webhook, pos, debit, reason, pnl, dry_run, data_label: str = "") -> bool:
     n = pos.contracts
     total = f"${pnl * (n or 0):,.0f}" if n else "unsized"
     return _post(webhook, {"embeds": [{
@@ -86,7 +88,7 @@ def exit_alert(webhook, pos, debit, reason, pnl, dry_run) -> bool:
             {"name": "Close at", "value": f"debit ${debit:.2f}/sh", "inline": True},
             {"name": "P/L", "value": f"${pnl:,.0f}/ct · total {total}", "inline": True},
             {"name": "Reason", "value": reason, "inline": False},
-        ],
+        ] + ([{"name": "Data source", "value": data_label, "inline": False}] if data_label else []),
     }]}, dry_run)
 
 

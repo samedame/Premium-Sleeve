@@ -12,7 +12,7 @@ from . import alerts, data, risk, state
 from .config import load
 
 
-def _current_debit(cfg, pos: state.Position) -> tuple[float | None, str | None]:
+def _current_debit(cfg, pos: state.Position, quotes_out: list | None = None) -> tuple[float | None, str | None]:
     """Per-share cost to buy the spread back, at mid plus a haircut.
 
     Returns (debit, error). A non-None error means the position could
@@ -26,6 +26,11 @@ def _current_debit(cfg, pos: state.Position) -> tuple[float | None, str | None]:
         return None, f"market data unavailable: {exc}"
     if short_q is None or long_q is None:
         return None, "strike no longer listed"
+    if quotes_out is not None:
+        quotes_out += [short_q, long_q]
+    bad = data.quote_problem(short_q) or data.quote_problem(long_q)
+    if bad:
+        return None, f"unusable quote ({bad})"
     if short_q.mid <= 0 or long_q.mid <= 0:
         return None, "no two-sided quote on one leg"
     slippage = cfg.fill_haircut * (short_q.width + long_q.width)
@@ -54,7 +59,8 @@ def main() -> int:
     blind: list[str] = []
 
     for pos in open_pos:
-        debit, err = _current_debit(cfg, pos)
+        leg_quotes: list = []
+        debit, err = _current_debit(cfg, pos, leg_quotes)
         if err is not None:
             blind.append(
                 f"· {pos.id} {pos.short_strike:g}/{pos.long_strike:g} "
@@ -81,7 +87,8 @@ def main() -> int:
 
         total = pnl_per_contract * (pos.contracts or 0)
         equity = state.record_close(equity, total, today, f"{pos.id}: {reason}")
-        alerts.exit_alert(cfg.discord_webhook, pos, debit, reason, pnl_per_contract, cfg.dry_run)
+        alerts.exit_alert(cfg.discord_webhook, pos, debit, reason, pnl_per_contract, cfg.dry_run,
+                          data.data_label(leg_quotes))
         closed_any = True
 
     dd = state.drawdown(equity)
