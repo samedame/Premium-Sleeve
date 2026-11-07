@@ -9,6 +9,15 @@ on:
     # works in ET, so no DST handling is needed here.
     - cron: "40 14-20 * * 1-5"
   workflow_dispatch:           # open-scheduler fires this
+    inputs:
+      scheduled_for_et:
+        description: "Intended fire time (ET, ISO-8601). Set by open-scheduler (ignored by the bot)."
+        required: false
+        default: ""
+      trigger:
+        description: "Who started this run (cf-scheduler | test | manual)"
+        required: false
+        default: "manual"
 
 permissions:
   contents: write
