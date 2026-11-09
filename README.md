@@ -182,3 +182,6 @@ only improvement actually available.
   and raises rather than returning empty, so a throttled run fails loudly
   instead of looking like "no candidates".
 - Early assignment and pin risk on the short leg are not modelled.
+
+## Assignment guard (advisory only)
+SPY options are American-style and physically settled. `src/assignment_guard.py` adds **one extra alert** to the monitor run when a still-open position's short put is in the money AND (extrinsic value under $0.05, or expiry within a day, or an estimated ex-dividend date within 3 days): `ASSIGNMENT RISK: short leg ITM, extrinsic $x, ex-div in n days (est.), close/roll before 15:55 ET today`. It never changes entries, exits, sizing, the gate or the state files, and any failure inside it is swallowed. `ASSIGNMENT_GUARD=0` turns it off. `tests/test_assignment_guard.py` runs `monitor.py` and a pinned copy of the unguarded monitor on the same inputs: guard off is identical, guard on differs only by the extra alert. Ex-dividend date is a third-Friday estimate; check your broker.

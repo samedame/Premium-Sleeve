@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import sys
 
-from . import alerts, data, risk, state
+from . import alerts, assignment_guard, data, risk, state
 from .config import load
 
 
@@ -109,6 +109,10 @@ def main() -> int:
             False, cfg.dry_run)
     if lines and not closed_any:
         alerts.status_alert(cfg.discord_webhook, "MONITOR", lines, True, cfg.dry_run)
+    if assignment_guard.enabled():   # advisory only: one extra alert, never touches positions, equity or exits
+        adv = assignment_guard.check(cfg, open_pos, today, data.quote_for, data.spot)
+        if adv:
+            alerts.status_alert(cfg.discord_webhook, "ASSIGNMENT RISK", adv, False, cfg.dry_run)
     return 1 if blind else 0
 
 
