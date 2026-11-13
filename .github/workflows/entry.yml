@@ -9,6 +9,15 @@ on:
     # works in ET, so no DST handling is needed here.
     - cron: "40 14-20 * * 1-5"
   workflow_dispatch:           # open-scheduler fires this
+    inputs:
+      scheduled_for_et:
+        description: "Intended fire time (ET, ISO-8601). Set by open-scheduler (ignored by the bot)."
+        required: false
+        default: ""
+      trigger:
+        description: "Who started this run (cf-scheduler | test | manual)"
+        required: false
+        default: "manual"
 
 permissions:
   contents: write
@@ -35,10 +44,18 @@ jobs:
       - run: pip install -r requirements.txt
         if: env.SKIP != '1'
 
+      - name: Log capital source
+        env:
+          CAPITAL_VAR: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING }}
+        run: |
+          if [ -n "$CAPITAL_VAR" ]; then echo "capital=$CAPITAL_VAR source=repo-variable"; else echo "capital=1500 source=default"; fi
       - name: Run entry scan
         if: env.SKIP != '1'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # Tradier first; without these two the bot falls back to yfinance and labels every alert DELAYED/UNVERIFIED.
+          TRADIER_API_KEY: ${{ secrets.TRADIER_API_KEY }}
+          TRADIER_BASE_URL: ${{ secrets.TRADIER_BASE_URL }}
           ACCOUNT_CAPITAL_FOR_SIZING: ${{ vars.ACCOUNT_CAPITAL_FOR_SIZING || '1500' }}   # default 1500; a repo variable overrides it
           ASSUME_FILLED: ${{ vars.ASSUME_FILLED }}
         run: python -m src.entry
@@ -58,3 +75,11 @@ jobs:
           git diff --staged --quiet || git commit -m "entry: state update $(date -u +%Y-%m-%dT%H:%MZ)"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
+
+      # A job that crashes posts nothing, and "no alert" looks exactly like "no signal". Best effort, never fails the run.
+      - name: Tell Discord if this run failed
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python notify_failure.py "Premium Sleeve entry"

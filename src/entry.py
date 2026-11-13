@@ -9,6 +9,15 @@ from .config import load
 from .selector import build_candidates
 
 
+def _leg_quotes(chains, cand):
+    """The raw OptionQuotes (with source and age) behind a candidate's two legs."""
+    out = []
+    for ch in chains:
+        if ch.expiry == cand.expiry:
+            out += [q for q in ch.puts if q.strike in (cand.short.strike, cand.long.strike)]
+    return out
+
+
 def main() -> int:
     cfg = load()
     today = dt.datetime.now(dt.timezone.utc).date()
@@ -62,6 +71,20 @@ def main() -> int:
         if not verdict.allowed:
             continue
 
+        # Data-quality gate. The strike choice above is unchanged; this only decides whether the quotes behind it are
+        # good enough to send an ENTRY alert. If not, a NOTICE goes out instead and nothing is opened.
+        leg_quotes = _leg_quotes(chains, cand)
+        problems = [p for p in (data.quote_problem(q) for q in leg_quotes) if p]
+        if problems:
+            alerts.status_alert(cfg.discord_webhook, "NOTICE: ENTRY NOT ALERTED",
+                                [f"a candidate {cand.expiry} {cand.short.strike:g}/{cand.long.strike:g} was found, "
+                                 "but its quotes are not usable, so no entry alert was sent:"]
+                                + [f"· {p}" for p in problems]
+                                + [f"data: {data.data_label(leg_quotes)}"],
+                                False, cfg.dry_run)
+            return 0
+        label = data.data_label(leg_quotes)
+
         projected = list(open_pos)
         pos = state.Position(
             id=state.new_id(),
@@ -78,7 +101,7 @@ def main() -> int:
         projected.append(pos)
         book = risk.book_greeks(projected)
 
-        alerts.entry_alert(cfg.discord_webhook, cand, verdict, decision, book, cfg.dry_run)
+        alerts.entry_alert(cfg.discord_webhook, cand, verdict, decision, book, cfg.dry_run, label)
 
         if cfg.assume_filled and not cfg.dry_run:
             positions.append(pos)
