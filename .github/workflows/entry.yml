@@ -2,9 +2,10 @@ name: entry
 
 # One trigger: the Cloudflare `open-scheduler` Worker dispatches this at 15:40 ET.
 # The hourly GitHub cron that used to sit behind it ("40 14-20 * * 1-5") was removed on 2026-11-13. GitHub starts
-# scheduled runs hours late on this repo, so it could not be timed: a run that happened to land inside the entry
-# window before 15:40 did the day's scan early and the Worker's dispatch then ran a second one, and every other
-# run was a billed no-op. If the Worker fails, its own "did not start" alert fires.
+# scheduled runs hours late on this repo, so it could not be timed: a run landing inside the entry window before
+# 15:40 would do the day's scan early and the Worker's dispatch (which bypasses the once-a-day limit) would then
+# run a second one. In practice every cron run landed after the close and was a billed no-op.
+# If the Worker fails, its own "did not start" alert fires.
 # To restore a GitHub-side trigger, add under `on:`:
 #   schedule:
 #     - cron: "40 14-20 * * 1-5"   # hourly; src/schedule_guard.py lets through the first run inside 12:00-15:55 ET

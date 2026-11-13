@@ -127,7 +127,7 @@ Two workflows, one trigger each:
 
 | Workflow | Trigger | Notes |
 |---|---|---|
-| `entry.yml` | `open-scheduler` (Cloudflare Worker) at **15:40 ET** | One scan per weekday. Its hourly GitHub cron was removed on 2026-11-13: it could not be timed, sometimes ran the scan early and let the Worker run a second one, and otherwise only burned Actions minutes. |
+| `entry.yml` | `open-scheduler` (Cloudflare Worker) at **15:40 ET** | One scan per weekday. Its hourly GitHub cron was removed on 2026-11-13: it could not be timed. A run landing inside the window before 15:40 would have done the scan early and the Worker's dispatch (which bypasses the once-a-day limit) would then have run a second one; in practice every cron run landed after the close and only burned Actions minutes. |
 | `monitor.yml` | hourly GitHub cron, filtered by `src/schedule_guard.py` | The Worker has no monitor job, so the cron stays. The guard lets through at most two runs per ET date, at least 3h apart, inside 09:45-15:55 ET, tracked in `state/runs.json`. |
 
 GitHub cron starts runs hours late on this repo, which is why the guard keys on New York time and a daily
