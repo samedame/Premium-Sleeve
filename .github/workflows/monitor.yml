@@ -2,12 +2,14 @@ name: monitor
 
 on:
   schedule:
-    # Same reasoning as entry.yml: fire hourly and let src/schedule_guard.py
-    # decide. Monitor is limited to two runs per ET date, at least 3 hours
-    # apart, inside 09:45-15:55 ET, because each run advances the
-    # kill-switch restart clock.
+    # This cron is the monitor's ONLY trigger (open-scheduler has no monitor job), so it stays.
+    # GitHub starts scheduled runs hours late on this repo, so it fires hourly and
+    # src/schedule_guard.py lets through at most two runs per ET date, at least 3 hours
+    # apart, inside 09:45-15:55 ET (each run advances the kill-switch restart clock).
+    # If a monitor job is ever added to open-scheduler (two slots, e.g. 10:00 and 13:30 ET),
+    # remove this cron so the job has one trigger.
     - cron: "10 14-20 * * 1-5"
-  workflow_dispatch:           # open-scheduler fires this
+  workflow_dispatch:           # manual runs (and open-scheduler, if a monitor job is added there)
     inputs:
       scheduled_for_et:
         description: "Intended fire time (ET, ISO-8601). Set by open-scheduler (ignored by the bot)."

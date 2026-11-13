@@ -172,6 +172,33 @@ check("monitor stops at two runs a day",
 old = record("entry", utc(2026, 10, 1, 18, 40), {})
 check("old run records are pruned",
       "entry" not in record("monitor", utc(2026, 11, 5, 15, 10), old))
+print("\n-- $1,500 account (the workflow default) --")
+# The 2026-10-27 live spread from the README: 756/746 put spread, $1.89 credit, $811 max loss a contract.
+readme_spread = candidate(short_k=756, long_k=746, credit_bid=(3.30, 3.40), long_q=(1.43, 1.49),
+                          short_vega=0.66, long_vega=0.544)     # -11.6 vega a point, as measured
+check("README spread risks about $811 a contract", abs(readme_spread.max_loss_per_contract - 811) < 1,
+      f"got {readme_spread.max_loss_per_contract}")
+small = size_position(readme_spread, [], Config(account_capital=1500.0))
+check("at $1,500 the sleeve sizes to zero contracts", not small.allowed and small.contracts is None)
+check("... and says the per-position cap is why",
+      any("sizes to zero contracts: per-position risk cap is binding" in r for r in small.reasons), str(small.reasons))
+check("one contract first fits near $20,000",
+      size_position(readme_spread, [], Config(account_capital=20000.0)).contracts == 1
+      and not size_position(readme_spread, [], Config(account_capital=15000.0)).allowed)
+
+print("\n-- one trigger per job --")
+_wf = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".github", "workflows")
+def _triggers(name):
+    """Trigger names under `on:` (two-space keys, comment lines ignored); no PyYAML needed."""
+    import re
+    text = "".join(l for l in open(os.path.join(_wf, name), encoding="utf-8") if not l.lstrip().startswith("#"))
+    block = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+    return re.findall(r"^  (\w+):", block, re.M)
+check("entry is started by open-scheduler only (no GitHub cron)", _triggers("entry.yml") == ["workflow_dispatch"],
+      str(_triggers("entry.yml")))
+check("monitor keeps its cron (it has no Worker job)", sorted(_triggers("monitor.yml")) == ["schedule", "workflow_dispatch"],
+      str(_triggers("monitor.yml")))
+
 
 print("\n" + ("ALL PASS" if not FAILS else f"{len(FAILS)} FAILURES: {FAILS}"))
 sys.exit(1 if FAILS else 0)

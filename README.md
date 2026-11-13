@@ -123,15 +123,31 @@ DRY_RUN=1 python -m src.monitor
 python3 tests/test_sleeve.py      # no network needed
 ```
 
-Two workflows: `entry.yml` scans for a new spread once per weekday,
-`monitor.yml` checks open positions up to twice a day. Both fire hourly
-and `src/schedule_guard.py` lets through only a run that lands inside
-the window (entry 12:00-15:55 ET, monitor 09:45-15:55 ET, monitor at
-least 3h apart), tracked in `state/runs.json`. GitHub cron starts runs
-hours late on this repo, which is why the old exact-UTC-hour DST guard
-silently skipped every entry scan; the guard now keys on New York time
-and the daily limit instead. Both also accept `workflow_dispatch`, which
-bypasses the window, so `open-scheduler` can fire them at 15:40 ET.
+Two workflows, one trigger each:
+
+| Workflow | Trigger | Notes |
+|---|---|---|
+| `entry.yml` | `open-scheduler` (Cloudflare Worker) at **15:40 ET** | One scan per weekday. Its hourly GitHub cron was removed on 2026-11-13: it could not be timed, sometimes ran the scan early and let the Worker run a second one, and otherwise only burned Actions minutes. |
+| `monitor.yml` | hourly GitHub cron, filtered by `src/schedule_guard.py` | The Worker has no monitor job, so the cron stays. The guard lets through at most two runs per ET date, at least 3h apart, inside 09:45-15:55 ET, tracked in `state/runs.json`. |
+
+GitHub cron starts runs hours late on this repo, which is why the guard keys on New York time and a daily
+limit instead of an exact UTC hour. `workflow_dispatch` bypasses the window on both workflows.
+
+### Why `state/positions.json` is still empty
+
+Checked on 2026-11-13. Three things, in order of weight:
+
+1. **At $1,500 the sleeve sizes to zero contracts.** `ACCOUNT_CAPITAL_FOR_SIZING` defaults to 1500 in the
+   workflows. The per-position cap is 5% of capital ($75) and one 10-wide spread risks about $811, so every
+   candidate ends in `NO ENTRY: sizes to zero contracts: per-position risk cap is binding` (see the capital
+   table above: the first contract fits near $20,000). This is the sleeve working as designed, and it means no
+   position can open at this account size.
+2. **No real entry scan has completed.** The Worker's 15:40 ET dispatches began on 2026-11-09 and every one was
+   refused by the GitHub Actions billing lock-out (9, 10 and 12 Nov failed in seconds; 11 Nov did not start).
+3. **Before that, only the cron ran**, hours late, and the guard correctly skipped it as outside the window.
+
+The stop rule is already written (see "Risk layer"): entries halt at a 15% drawdown from the sleeve's peak and
+restart only after 20 sessions with VIX/VIX3M below 1.00.
 
 Set `DISCORD_WEBHOOK_URL` as a repo **secret**;
 `ACCOUNT_CAPITAL_FOR_SIZING` and `ASSUME_FILLED` as repo **variables**.
